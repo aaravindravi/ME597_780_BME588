@@ -36,7 +36,14 @@ pip install -r requirements.txt
 ```
 
 ### Now you are ready to run the jupyter notebooks in the notebooks/ folder!
-
+#### Navigate to your working directory and launch jupyter lab
+```bash
+cd C:{your_working_directory}\ME597_780_BME588
+```
+```bash
+jupyter lab
+```
+This will open the jupyter lab in your browser. Navigate to the browser and 
 ## Helpful Download Links
 - Python: https://www.python.org/downloads/
 - Visual Studio Code: https://code.visualstudio.com/download
