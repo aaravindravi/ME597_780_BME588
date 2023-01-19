@@ -1,17 +1,31 @@
 """
-Utilities for CNN based SSVEP Classification
+Utilities for processing the EEG dataset.
 """
 import math
 import warnings
 warnings.filterwarnings('ignore')
 
 import numpy as np
+import pandas as pd
 from scipy.signal import butter, filtfilt
+from sklearn.metrics import accuracy_score, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-from keras.models import Sequential
-from keras.layers import Dense, Activation, Flatten, Dropout, Conv2D, BatchNormalization
-from keras.utils.np_utils import to_categorical
-from keras import initializers, regularizers
+CHANNEL_MAPPING = {'PO7': 0,
+                   'PO3': 1,
+                   'POZ': 2,
+                   'PO4': 3,
+                   'O1': 4,
+                   'OZ': 5,
+                   'O2': 6}
+
+FFT_PARAMS = {
+    'resolution': 0.1,
+    'start_frequency': 5,
+    'end_frequency': 35.0,
+    'sampling_rate': 256
+}
 
 def butter_bandpass_filter(data, lowcut, highcut, sample_rate, order):
     '''
@@ -169,93 +183,76 @@ def magnitude_spectrum_features(segmented_data, FFT_PARAMS):
     
     return features_data
 
-def complex_spectrum_features(segmented_data, FFT_PARAMS):
+
+def plot_time_series(time_series_to_plot, stim_index, channel, sample_rate):
     '''
-    Returns complex spectrum features. Fast Fourier Transform computed based on
-    the FFT parameters provided as input. The real and imaginary parts of the input
-    signal are concatenated into a single feature vector.
+    Plots the time series of each trial in this dataset.
 
     Args:
-        segmented_data (numpy.ndarray): epoched eeg data of shape 
-        (num_classes, num_channels, num_trials, number_of_segments, num_samples).
-        FFT_PARAMS (dict): dictionary of parameters used for feature extraction.
-        FFT_PARAMS['resolution'] (float): frequency resolution per bin (Hz).
-        FFT_PARAMS['start_frequency'] (float): start frequency component to pick from (Hz). 
-        FFT_PARAMS['end_frequency'] (float): end frequency component to pick upto (Hz). 
-        FFT_PARAMS['sampling_rate'] (float): sampling rate (Hz).
-
-    Returns:
-        (numpy.ndarray): complex spectrum features of the input EEG.
-        (2*n_fc, num_channels, num_classes, num_trials, number_of_segments)
+        time_series_to_plot (numpy.ndarray): Time series to plot (n_classes, n_chan, n_samples, n_trials).
+        sample_rate (int): sampling frequency in Hz.
     '''
+    num_classes = time_series_to_plot.shape[0]
+    n_ch = time_series_to_plot.shape[1]
+    total_trial_len = time_series_to_plot.shape[2]
+    num_trials = time_series_to_plot.shape[3]
+    total_trial_s = total_trial_len/sample_rate
     
-    num_classes = segmented_data.shape[0]
-    num_chan = segmented_data.shape[1]
-    num_trials = segmented_data.shape[2]
-    number_of_segments = segmented_data.shape[3]
-    fft_len = segmented_data[0, 0, 0, 0, :].shape[0]
-
-    NFFT = round(FFT_PARAMS['sampling_rate']/FFT_PARAMS['resolution'])
-    fft_index_start = int(round(FFT_PARAMS['start_frequency']/FFT_PARAMS['resolution']))
-    fft_index_end = int(round(FFT_PARAMS['end_frequency']/FFT_PARAMS['resolution']))+1
-
-    features_data = np.zeros((2*(fft_index_end - fft_index_start), 
-                              segmented_data.shape[1], segmented_data.shape[0], 
-                              segmented_data.shape[2], segmented_data.shape[3]))
+    fig, ax = plt.subplots(3, 5, figsize=(22, 15), sharex=True, gridspec_kw={'wspace': 0.2})
+    ax = ax.reshape(-1)
     
-    for target in range(0, num_classes):
-        for channel in range(0, num_chan):
-            for trial in range(0, num_trials):
-                for segment in range(0, number_of_segments):
-                    temp_FFT = np.fft.fft(segmented_data[target, channel, trial, segment, :], NFFT)/fft_len
-                    real_part = np.real(temp_FFT)
-                    imag_part = np.imag(temp_FFT)
-                    features_data[:, channel, target, trial, segment] = np.concatenate((
-                        real_part[fft_index_start:fft_index_end,], 
-                        imag_part[fft_index_start:fft_index_end,]), axis=0)
+    time_axis = np.linspace(0, total_trial_s, total_trial_len)
+    for trial_index in range(num_trials):
+        raw_eeg_trial = time_series_to_plot[stim_index, CHANNEL_MAPPING[channel], :, trial_index]
+        ax[trial_index].plot(time_axis, raw_eeg_trial)
+        ax[trial_index].set_xlabel('Time (s)')
+        ax[trial_index].set_title(f'Trial {trial_index+1}')
+    ax[0].set_ylabel('Amplitude (uV)')
+    ax[5].set_ylabel('Amplitude (uV)')
+    ax[10].set_ylabel('Amplitude (uV)');
     
-    return features_data
-
-def CNN_model(input_shape, CNN_PARAMS):
+    
+def plot_spectrum(magnitude_spectrum, num_classes, subject, channel_idx, flicker_freq):
     '''
-    Returns the Concolutional Neural Network model for SSVEP classification.
+    Plots the average magnitude spectrum across trials.
 
     Args:
-        input_shape (numpy.ndarray): shape of input training data 
-        e.g. [num_training_examples, num_channels, n_fc] or [num_training_examples, num_channels, 2*n_fc].
-        CNN_PARAMS (dict): dictionary of parameters used for feature extraction.        
-        CNN_PARAMS['batch_size'] (int): training mini batch size.
-        CNN_PARAMS['epochs'] (int): total number of training epochs/iterations.
-        CNN_PARAMS['droprate'] (float): dropout ratio.
-        CNN_PARAMS['learning_rate'] (float): model learning rate.
-        CNN_PARAMS['lr_decay'] (float): learning rate decay ratio.
-        CNN_PARAMS['l2_lambda'] (float): l2 regularization parameter.
-        CNN_PARAMS['momentum'] (float): momentum term for stochastic gradient descent optimization.
-        CNN_PARAMS['kernel_f'] (int): 1D kernel to operate on conv_1 layer for the SSVEP CNN. 
-        CNN_PARAMS['n_ch'] (int): number of eeg channels
-        CNN_PARAMS['num_classes'] (int): number of SSVEP targets/classes
-
-    Returns:
-        (keras.Sequential): CNN model.
+        magnitude_spectrum (numpy.ndarray): Magnitude spectrum computed across trials of shape (n_freq, n_chan, n_classes, n_trials, 1) 
+        num_classes (int): number of classes in the dataset.
+        subject (str): subject_id.
+        channel_idx (int): channel index to plot. 
+        flicker_freq (numpy.ndarray): stimulus frequencies of shape (n_classes,). 
     '''
+    fig, ax = plt.subplots(4, 3, figsize=(16, 14), gridspec_kw=dict(hspace=0.5, wspace=0.2))
+    ax = ax.reshape(-1)
+    for class_idx in range(num_classes):
+        stim_freq = flicker_freq[class_idx]
+        fft_axis = np.linspace(FFT_PARAMS['start_frequency'], FFT_PARAMS['end_frequency'], magnitude_spectrum.shape[0])
+        ax[class_idx].plot(fft_axis, np.mean(np.squeeze(magnitude_spectrum[:, channel_idx, class_idx, :, :]), axis=1))
+        ax[class_idx].axvline(stim_freq, linestyle=':', linewidth=0.7, c='k', label=f'f = {stim_freq} Hz')
+        ax[class_idx].axvline(2*stim_freq, linestyle=':', linewidth=0.7, c='b', label=f'2*f = {2*stim_freq} Hz')
+        ax[class_idx].set_xlabel('Frequency (Hz)') 
+        ax[class_idx].set_ylabel('Amplitude (uV)')
+        ax[class_idx].set_title(f'{subject} f = {flicker_freq[class_idx]} Hz')
+        ax[class_idx].set_xlim(fft_axis[0], fft_axis[-1])
+    plt.show()
+    print()
     
-    model = Sequential()
-    model.add(Conv2D(2*CNN_PARAMS['n_ch'], kernel_size=(CNN_PARAMS['n_ch'], 1), 
-                     input_shape=(input_shape[0], input_shape[1], input_shape[2]), 
-                     padding="valid", kernel_regularizer=regularizers.l2(CNN_PARAMS['l2_lambda']), 
-                     kernel_initializer=initializers.RandomNormal(mean=0.0, stddev=0.01, seed=None)))
-    model.add(BatchNormalization())
-    model.add(Activation('relu'))
-    model.add(Dropout(CNN_PARAMS['droprate']))  
-    model.add(Conv2D(2*CNN_PARAMS['n_ch'], kernel_size=(1, CNN_PARAMS['kernel_f']), 
-                     kernel_regularizer=regularizers.l2(CNN_PARAMS['l2_lambda']), padding="valid", 
-                     kernel_initializer=initializers.RandomNormal(mean=0.0, stddev=0.01, seed=None)))
-    model.add(BatchNormalization())
-    model.add(Activation('relu'))
-    model.add(Dropout(CNN_PARAMS['droprate']))  
-    model.add(Flatten())
-    model.add(Dense(CNN_PARAMS['num_classes'], activation='softmax', 
-                    kernel_regularizer=regularizers.l2(CNN_PARAMS['l2_lambda']), 
-                    kernel_initializer=initializers.RandomNormal(mean=0.0, stddev=0.01, seed=None)))
     
-    return model
+def plot_performance(ground_truth_labels_dict, predicted_labels_dict, subject_id):
+    '''
+    Plots the classification performance based on labels provided.
+
+    Args:
+        ground_truth_labels_dict (dict): dictionary of true labels for each subject_id.
+        predicted_labels_dict (dict): dictionary of predicted labels for each subject_id.
+        subject_id (str): subject_id to plot.
+    Returns:
+        (float): predicted accuracy.
+    '''
+    accuracy = accuracy_score(ground_truth_labels_dict[subject_id], predicted_labels_dict[subject_id])*100
+    cmat = confusion_matrix(ground_truth_labels_dict[subject_id], predicted_labels_dict[subject_id])
+    sns.heatmap(pd.DataFrame(cmat), annot=True, cmap='Greens');
+    print(f'Subject ID: {subject_id} - Accuracy: {accuracy} %')
+    
+    return accuracy

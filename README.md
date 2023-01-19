@@ -2,21 +2,34 @@
 
 This lab will cover topics in electroencephalography (EEG) based brain computer interfaces. Some of the steps in BCI pipeline such as: data handling, preprocessing, feature extraction and classification will be covered. This repository uses a publicly available offline dataset collected during a Steady-state visual evoked potentials (SSVEP) BCI experiment. This tutorial is designed as part of a lab for the Neural and Rehabilitation Engineering course at University of Waterloo (ME 597/BME 588/ME 780).
 
-Requires Python 3.7.1 or above.
+Requires Python 3.7.1. Note: When installing python on windows, add Python to environment variables. 
 
 ## Installing this repo
 
-### Step 1: Clone this repository
+### Step 1: Install Git or Github Desktop
+- Git download link and install: https://git-scm.com/downloads or https://gitforwindows.org/
+
+#### Modifying PATH on Windows 10
+
+1. In the Start Menu or taskbar search, search for "environment variable".
+2. Select "Edit the system environment variables".
+3. Click the "Environment Variables" button at the bottom.
+4. Double-click the "Path" entry under "System variables".
+5. With the "New" button in the PATH editor, add C:\Program Files\Git\bin\ and C:\Program Files\Git\cmd\ to the end of the list.
+6. Close and re-open your console (Windows Powershell).
+
+#### Clone this repository using Git
 
 ```bash
 git clone https://github.com/aaravindravi/ME597_780_BME588.git
 ```
+#### Alternate option is directly download the zip folder from the top right corner of this interface
+- Download zip folder: https://github.com/aaravindravi/ME597_780_BME588/archive/refs/heads/main.zip
 
 ### Step 2: Creating a virtual environment
-
+Run the following command in the Terminal/Powershell from inside a folder of your choice.
 ```bash
 python -m venv bcilab
-bcilab/bin/activate
 ```
 
 ### Step 3: Activate the environment
@@ -30,9 +43,21 @@ source bcilab/bin/activate
 ```
 
 ### Step 4: Installing the requirements and dependencies
-
+Navigate to the base folder of the project: 
+```bash
+   cd C:{your_working_directory}\ME597_780_BME588
+```
+Upgrade your pip library
+```bash
+python -m pip install --upgrade pip
+```
+Install the requirements and dependencies
 ```bash
 pip install -r requirements.txt
+```
+Check the list of installed libraries
+```bash
+pip list
 ```
 
 ### Now you are ready to run the jupyter notebooks in the notebooks/ folder!
@@ -47,6 +72,7 @@ This will open the jupyter lab in your browser. Navigate to the browser and
 ## Helpful Download Links
 - Python: https://www.python.org/downloads/
 - Visual Studio Code: https://code.visualstudio.com/download
+- Git download link and install: https://git-scm.com/downloads or https://gitforwindows.org/
 
 ## Note
 - Windows based systems can use Windows Power Shell to run the above installation.
